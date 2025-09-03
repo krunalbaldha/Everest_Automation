@@ -3,7 +3,6 @@ import mysql.connector
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
-from tabulate import tabulate
 
 # Configurations
 SSH_CONFIG = {
@@ -23,11 +22,11 @@ DB_CONFIG = {
 
 DATE_RANGE = {"start": "2025-03-01", "end": "2025-03-24"}
 
-print("\U0001F50D Starting Database & UI Data Verification")
+print("🔍 Starting Database & UI Data Verification")
 
 # Establish SSH Tunnel
 try:
-    print("\U0001F680 Establishing SSH Connection...")
+    print("🚀 Establishing SSH Connection...")
     tunnel = sshtunnel.SSHTunnelForwarder(
         (SSH_CONFIG["host"], SSH_CONFIG["port"]),
         ssh_username=SSH_CONFIG["user"],
@@ -69,8 +68,12 @@ try:
     cursor.execute(query, (f"{DATE_RANGE['start']} 00:00:00", f"{DATE_RANGE['end']} 23:59:59"))
     db_results = cursor.fetchall()
 
-    print("\n✅ Database Results:")
-    print(tabulate(db_results, headers="keys", tablefmt="grid"))
+    # ✅ Displaying DB results
+    print(f"\n✅ Data fetched from DB ({len(db_results)} records):")
+    for record in db_results:
+        print(f"   🤵 Name: {record['name']}, Logged: {record['logged_hours']}, "
+              f"Billable: {record['billable_hours']}, Non-Billable: {record['non_billable_hours']}, "
+              f"Unreviewed: {record['not_reviewed_hours']}, Last Reviewed: {record['coordinator_date_reviewed']}")
 
     # Close database connection
     cursor.close()
@@ -109,27 +112,27 @@ try:
         })
 
     driver.quit()
-    print("✅ UI Results:")
-    print(tabulate(ui_results, headers="keys", tablefmt="grid"))
-    
+    print(f"✅ Data fetched from UI ({len(ui_results)} records)")
     print("🔎 Comparing Database Data with UI Data...")
-    comparison_results = []
+
+    # Compare DB vs UI
     for db_entry in db_results:
         match = next((ui for ui in ui_results if ui["name"] == db_entry["name"]), None)
 
         if match:
+            print(f"🔄 Comparing {db_entry['name']}...")
+
+            # Convert 'not_reviewed_hours' to integers before comparison
             db_hours = int(float(db_entry['not_reviewed_hours'])) if db_entry['not_reviewed_hours'] else 0
             ui_hours = int(match['not_reviewed_hours']) if match['not_reviewed_hours'].isdigit() else 0
 
-            status = "✅ Match" if db_hours == ui_hours else "❌ Mismatch"
-            comparison_results.append([
-                db_entry['name'], db_hours, ui_hours, status
-            ])
-        else:
-            comparison_results.append([db_entry['name'], db_entry['not_reviewed_hours'], "Not Found", "❌ Name Missing in UI"])
+            if db_hours == ui_hours:
+                print(f"✅ Match in Unreviewed Hours: {db_entry['name']} - DB={db_hours} UI={ui_hours}")
+            else:
+                print(f"❌ Mismatch in Unreviewed Hours: {db_entry['name']} - DB={db_hours} UI={ui_hours}")
 
-    print("\n🔍 Comparison Results:")
-    print(tabulate(comparison_results, headers=["Name", "DB Hours", "UI Hours", "Status"], tablefmt="grid"))
+        else:
+            print(f"❌ Name {db_entry['name']} not found in UI")
 
     # Stop SSH tunnel
     tunnel.stop()
